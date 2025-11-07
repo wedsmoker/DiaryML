@@ -216,6 +216,36 @@ async def mobile_login(request: MobileLoginRequest):
         if not db.verify_password():
             raise HTTPException(status_code=401, detail="Incorrect password")
 
+        # Initialize schema
+        db.initialize_schema()
+
+        # Initialize app state if not already done (same as desktop unlock)
+        if not app_state.get("unlocked"):
+            app_state["db"] = db
+            app_state["unlocked"] = True
+
+            # Initialize AI components
+            if not app_state.get("rag"):
+                app_state["rag"] = get_rag_engine()
+            if not app_state.get("emotion_detector"):
+                app_state["emotion_detector"] = get_emotion_detector()
+            if not app_state.get("pattern_analyzer"):
+                app_state["pattern_analyzer"] = get_pattern_analyzer()
+            if not app_state.get("recommender"):
+                app_state["recommender"] = get_recommender()
+
+            # Always recreate these as they depend on the database instance
+            app_state["analytics"] = get_analytics(db)
+            app_state["temporal"] = TemporalIntelligence(db)
+
+            # Load Qwen model (this might take a moment)
+            if not app_state.get("qwen"):
+                try:
+                    app_state["qwen"] = get_qwen_interface()
+                except Exception as e:
+                    print(f"Warning: Could not load Qwen model: {e}")
+                    app_state["qwen"] = None
+
         # Create JWT token valid for 30 days
         token = create_access_token(request.password)
 
@@ -477,6 +507,91 @@ async def mobile_get_insights_summary(
             "top_projects": [],
             "quick_insight": "Keep journaling!"
         }
+
+
+# === Mobile Chat Endpoints ===
+
+@app.get("/api/mobile/chat/sessions")
+async def mobile_get_chat_sessions(
+    db: DiaryDatabase = Depends(get_current_user)
+):
+    """Get all chat sessions for mobile"""
+    try:
+        # Use same logic as desktop chat sessions
+        qwen = app_state.get("qwen")
+        if not qwen:
+            return {"sessions": []}
+
+        sessions = db.get_all_chat_sessions()
+        return {"sessions": sessions}
+    except Exception as e:
+        print(f"Error getting chat sessions: {e}")
+        return {"sessions": []}
+
+
+@app.get("/api/mobile/chat/sessions/{session_id}/messages")
+async def mobile_get_chat_session_messages(
+    session_id: int,
+    db: DiaryDatabase = Depends(get_current_user)
+):
+    """Get messages from a specific chat session for mobile"""
+    try:
+        messages = db.get_chat_messages(session_id)
+        return {"messages": messages}
+    except Exception as e:
+        print(f"Error getting messages: {e}")
+        return {"messages": []}
+
+
+@app.delete("/api/mobile/chat/sessions/{session_id}")
+async def mobile_delete_chat_session(
+    session_id: int,
+    db: DiaryDatabase = Depends(get_current_user)
+):
+    """Delete a chat session for mobile"""
+    try:
+        db.delete_chat_session(session_id)
+        return {"success": True}
+    except Exception as e:
+        print(f"Error deleting session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/mobile/models/list")
+async def mobile_list_models(
+    db: DiaryDatabase = Depends(get_current_user)
+):
+    """List available models for mobile"""
+    try:
+        from pathlib import Path
+        models_dir = Path("models")
+
+        if not models_dir.exists():
+            return {"models": [], "current_model": None}
+
+        # Find all GGUF model files
+        gguf_files = list(models_dir.glob("*.gguf"))
+        models = [f.name for f in gguf_files]
+
+        # Get current model from config
+        current_model = None
+        try:
+            import json
+            config_path = Path("model_config.json")
+            if config_path.exists():
+                with open(config_path) as f:
+                    config = json.load(f)
+                    current_model = config.get("model_path", "").replace("models/", "")
+        except:
+            pass
+
+        return {
+            "models": models,
+            "current_model": current_model
+        }
+    except Exception as e:
+        print(f"Error listing models: {e}")
+        return {"models": [], "current_model": None}
 
 
 # === Entry Endpoints ===
