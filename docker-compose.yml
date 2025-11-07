@@ -6,7 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: diaryml
-    network_mode: host
+    ports:
+      - "8000:8000"
     volumes:
       # Persist database and data
       - ./diary.db:/app/diary.db

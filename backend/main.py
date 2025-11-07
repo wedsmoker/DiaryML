@@ -80,10 +80,14 @@ app = FastAPI(
 async def startup_event():
     """Display server info on startup"""
     import socket
+    from pathlib import Path
 
     print("\n" + "=" * 60)
     print("DiaryML - Your Private Creative Companion")
     print("=" * 60)
+
+    # Check if running in Docker
+    in_docker = Path("/.dockerenv").exists()
 
     # Get local IP for mobile setup
     try:
@@ -93,12 +97,19 @@ async def startup_event():
         s.close()
 
         print(f"\n  Desktop: http://localhost:8000")
-        print(f"  Mobile:  http://{local_ip}:8000/api")
-        print(f"\n  Enter the Mobile URL in your phone's DiaryML app")
+
+        # Only show IP if not in Docker or if it's a real local IP
+        if in_docker or local_ip.startswith("172.") or local_ip.startswith("10.0."):
+            print(f"\n  For Mobile: Use start-docker.bat (Windows) or start-docker.sh (Mac/Linux)")
+            print(f"  to see your mobile URL")
+        else:
+            print(f"  Mobile:  http://{local_ip}:8000/api")
+            print(f"\n  Enter the Mobile URL in your phone's DiaryML app")
+
         print("=" * 60 + "\n")
     except Exception as e:
         print(f"\n  Desktop: http://localhost:8000")
-        print(f"  Mobile:  (Could not detect IP: {e})")
+        print(f"  (Could not detect IP: {e})")
         print("=" * 60 + "\n")
 
 
