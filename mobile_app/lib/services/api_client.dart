@@ -270,7 +270,7 @@ class ApiClient {
   /// List available models
   Future<Map<String, dynamic>> listModels() async {
     final response = await http.get(
-      Uri.parse('$_serverUrl/mobile/models/list'),
+      Uri.parse('$_serverUrl/models/list'),
       headers: _getHeaders(),
     );
 
@@ -291,7 +291,7 @@ class ApiClient {
     };
 
     final response = await http.post(
-      Uri.parse('$_serverUrl/mobile/models/switch'),
+      Uri.parse('$_serverUrl/models/switch'),
       headers: headers,
       body: body,
     );

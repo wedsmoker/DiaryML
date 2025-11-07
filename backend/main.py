@@ -1405,11 +1405,30 @@ async def get_emotional_triggers(days: int = 90):
 
 # === Model Management Endpoints ===
 
+async def get_optional_auth(authorization: Optional[str] = Header(None)) -> bool:
+    """Check if user is authenticated via desktop unlock or mobile JWT"""
+    if app_state["unlocked"]:
+        return True
+
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.replace("Bearer ", "")
+        try:
+            password_hash = verify_token(token)
+            if password_hash and app_state.get("db"):
+                return True
+        except:
+            pass
+
+    return False
+
+
 @app.get("/api/models/list")
-async def list_available_models():
+async def list_available_models(
+    is_auth: bool = Depends(get_optional_auth)
+):
     """List all GGUF models in the models directory"""
-    if not app_state["unlocked"]:
-        raise HTTPException(status_code=401, detail="Diary is locked")
+    if not is_auth:
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
     models_dir = Path(__file__).parent.parent / "models"
     models_dir.mkdir(exist_ok=True)
@@ -1451,10 +1470,13 @@ async def list_available_models():
 
 
 @app.post("/api/models/switch")
-async def switch_model(model_filename: str = Form(...)):
+async def switch_model(
+    model_filename: str = Form(...),
+    is_auth: bool = Depends(get_optional_auth)
+):
     """Switch to a different model (supports both text-only and vision-language models)"""
-    if not app_state["unlocked"]:
-        raise HTTPException(status_code=401, detail="Diary is locked")
+    if not is_auth:
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
         models_dir = Path(__file__).parent.parent / "models"
