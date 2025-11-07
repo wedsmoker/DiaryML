@@ -564,6 +564,84 @@ async def mobile_delete_chat_session(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/mobile/chat")
+async def mobile_chat(
+    message: str = Form(...),
+    session_id: Optional[str] = Form(None),
+    db: DiaryDatabase = Depends(get_current_user)
+):
+    """Send chat message from mobile app"""
+    try:
+        qwen = app_state.get("qwen")
+        if not qwen:
+            return {
+                "response": "The AI model is not currently loaded. Please check the server logs.",
+                "session_id": None,
+                "mood_context": {}
+            }
+
+        rag = app_state.get("rag")
+
+        # Get or create chat session
+        sid = int(session_id) if session_id else None
+        if not sid:
+            # Create new session
+            sid = db.create_chat_session()
+
+        # Save user message
+        db.add_chat_message(sid, "user", message)
+
+        # Get current mood context
+        recent_entries = db.get_recent_entries(limit=5)
+        recent_moods = []
+        for entry in recent_entries:
+            if entry.get("moods"):
+                recent_moods.extend(entry["moods"].items())
+
+        # Average recent mood
+        mood_context = {}
+        if recent_moods:
+            from collections import defaultdict
+            mood_totals = defaultdict(list)
+            for emotion, score in recent_moods:
+                mood_totals[emotion].append(score)
+
+            mood_context = {
+                emotion: sum(scores) / len(scores)
+                for emotion, scores in mood_totals.items()
+            }
+
+        # Get relevant past context via RAG
+        past_context = rag.get_contextual_entries(message, n_results=1) if rag else []
+
+        # Generate AI response
+        try:
+            response = qwen.generate_response(
+                user_message=message,
+                mood_context=mood_context,
+                past_context=past_context,
+                max_tokens=None
+            )
+        except Exception as model_error:
+            print(f"Error generating AI response: {model_error}")
+            response = f"Error generating response: {str(model_error)}"
+
+        # Save assistant response
+        db.add_chat_message(sid, "assistant", response)
+
+        return {
+            "response": response,
+            "session_id": sid,
+            "mood_context": mood_context
+        }
+
+    except Exception as e:
+        print(f"Mobile chat error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/mobile/models/list")
 async def mobile_list_models(
     db: DiaryDatabase = Depends(get_current_user)
