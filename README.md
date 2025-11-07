@@ -10,6 +10,8 @@
 
 **Private AI journaling with emotion detection, temporal analytics, and deep insights—100% offline.**
 
+![DiaryML Web Demo](webdemo.png)
+
 ## ✨ Features
 
 | Feature | Description |
